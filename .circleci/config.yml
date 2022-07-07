@@ -115,7 +115,8 @@ jobs:
           command: |
             git --no-pager diff go.mod go.sum
             git --no-pager diff --quiet go.mod go.sum
-  build-all:
+
+  build-linux:
     executor: golang
     steps:
       - install-deps
@@ -553,7 +554,7 @@ jobs:
           name: Publish release
           command: ./scripts/publish-release.sh
 
-  publish-snapcraft:
+  build-snapcraft:
     description: build and push snapcraft
     machine:
       image: ubuntu-2004:202104-01
@@ -563,6 +564,11 @@ jobs:
         type: string
         default: "edge"
         description: snapcraft channel
+      publish:
+        default: true
+        description: should this build be published?
+        type: boolean
+
     steps:
       - checkout
       - run:
@@ -577,6 +583,7 @@ jobs:
           name: build snap
           command: snapcraft --use-lxd
       - run:
+          condition: << parameters.publish >>
           name: publish snap
           command: snapcraft push *.snap --release << parameters.channel >>
 
@@ -713,7 +720,8 @@ jobs:
           at: "."
       - packer_build:
           template: tools/packer/lotus-snap.pkr.hcl
-  publish-dockerhub:
+
+  build-dockerhub:
     description: publish to dockerhub
     machine:
       image: ubuntu-2004:202010-01
@@ -721,6 +729,10 @@ jobs:
       tag:
         type: string
         default: latest
+      publish:
+        default: false
+        description: should this build be published?
+        type: boolean
     steps:
       - checkout
       - run:
@@ -741,6 +753,7 @@ jobs:
             fi
       - run:
           name: docker push
+          condition: << parameters.publish >>
           command: |
             docker push filecoin/lotus:<< parameters.tag >>
             docker push filecoin/lotus-all-in-one:<< parameters.tag >>
@@ -1020,7 +1033,7 @@ workflows:
               only:
                 - master
       - build-debug
-      - build-all:
+      - build-linux:
           filters:
             tags:
               only:
@@ -1044,20 +1057,20 @@ workflows:
       - build-appimage:
           filters:
             branches:
-              ignore:
-                - /.*/
+              only:
+                - /^release\/v\d+\.\d+\.\d+(-rc\d+)?$/
             tags:
               only:
                 - /^v\d+\.\d+\.\d+(-rc\d+)?$/
       - publish:
           requires:
-            - build-all
+            - build-linux
             - build-macos
             - build-appimage
           filters:
             branches:
-              ignore:
-                - /.*/
+              only:
+                - /^release\/v\d+\.\d+\.\d+(-rc\d+)?$/
             tags:
               only:
                 - /^v\d+\.\d+\.\d+(-rc\d+)?$/
@@ -1073,9 +1086,10 @@ workflows:
           repo: lotus-test
           tag: '${CIRCLE_SHA1:0:8}'
           target: lotus-test
-      - publish-snapcraft:
+      - build-snapcraft:
           name: publish-snapcraft-stable
           channel: stable
+          publish: true
           filters:
             branches:
               ignore:
@@ -1083,16 +1097,30 @@ workflows:
             tags:
               only:
                 - /^v\d+\.\d+\.\d+(-rc\d+)?$/
-      - publish-dockerhub:
-          name: publish-dockerhub
+      - build-snapcraft:
+          name: build-snapcraft-test
+          filters:
+            branches:
+              only:
+                - /^release\/v\d+\.\d+\.\d+(-rc\d+)?$/
+      - build-dockerhub:
+          name: publish-dockerhub-stable
+          tag: stable
+          publish: true
+          filters:
+            branches:
+              ignore:
+                - /.*/
+            tags:
+              only:
+                - /^v\d+\.\d+\.\d+(-rc\d+)?$/
+      - build-dockerhub:
+          name: build-dockerhub-test
           tag: stable
           filters:
             branches:
-              ignore:
-                - /.*/
-            tags:
               only:
-                - /^v\d+\.\d+\.\d+(-rc\d+)?$/
+                - /^release\/v\d+\.\d+\.\d+(-rc\d+)?$/
 
   nightly:
     triggers:
@@ -1103,11 +1131,13 @@ workflows:
               only:
                 - master
     jobs:
-      - publish-snapcraft:
+      - build-snapcraft:
           name: publish-snapcraft-nightly
+          publish: true
           channel: edge
-      - publish-dockerhub:
+      - build-dockerhub:
           name: publish-dockerhub-nightly
+          publish: true
           tag: nightly
   monthly:
     triggers:
