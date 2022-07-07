@@ -579,11 +579,6 @@ jobs:
           name: install snapcraft
           command: sudo snap install snapcraft --classic
       - run:
-          name: create snapcraft config file
-          command: |
-            mkdir -p ~/.config/snapcraft
-            echo "$SNAPCRAFT_LOGIN_FILE" | base64 -d > ~/.config/snapcraft/snapcraft.cfg
-      - run:
           name: build snap
           command: snapcraft --use-lxd
       - run:
