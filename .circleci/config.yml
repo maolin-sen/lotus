@@ -1068,8 +1068,8 @@ workflows:
             - build-appimage
           filters:
             branches:
-              only:
-                - /^release\/v\d+\.\d+\.\d+(-rc\d+)?$/
+              ignore:
+                - /.*/
             tags:
               only:
                 - /^v\d+\.\d+\.\d+(-rc\d+)?$/
